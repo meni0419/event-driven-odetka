@@ -1,4 +1,4 @@
-# Техническое задание: Event-Driven Интернет-Магазин (аналог ROZETKA)
+# Техническое задание: Event-Driven Интернет-Магазин (аналог ROZETKA, но  ODETKA)
 
 ## 1. Модуль: Товары (catalog-service)
 
