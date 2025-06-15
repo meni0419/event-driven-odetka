@@ -1,4 +1,5 @@
 import logging
+import asyncio
 from typing import Dict, Any
 import httpx
 from datetime import datetime
@@ -39,16 +40,18 @@ class CartEventHandlers:
         payload = event_data.get('payload', {})
         cart_id = payload.get('cart_id')
         item = payload.get('item', {})
+        change = payload.get('change', {})
 
         logger.info(
             f"🔄 Item updated in cart {cart_id}: "
-            f"Product {item.get('product_id')} -> {item.get('quantity')} шт."
+            f"Product {item.get('product_id')} -> {item.get('quantity')} шт. "
+            f"(было: {change.get('from')}, стало: {change.get('to')})"
         )
 
         await CartEventHandlers._send_notification(
             cart_id=cart_id,
             event_type="item_updated",
-            message=f"Количество товара изменено: {item.get('quantity')} шт."
+            message=f"Количество товара изменено: {change.get('from')} → {item.get('quantity')} шт."
         )
 
         await CartEventHandlers._update_analytics("item_updated", payload)
@@ -59,13 +62,14 @@ class CartEventHandlers:
         payload = event_data.get('payload', {})
         cart_id = payload.get('cart_id')
         product_id = payload.get('product_id')
+        product = payload.get('product', {})
 
-        logger.info(f"🗑️ Item removed from cart {cart_id}: Product {product_id}")
+        logger.info(f"🗑️ Item removed from cart {cart_id}: Product {product_id} ({product.get('name', 'Unknown')})")
 
         await CartEventHandlers._send_notification(
             cart_id=cart_id,
             event_type="item_removed",
-            message=f"Товар удален из корзины"
+            message=f"Товар удален из корзины: {product.get('name', f'Product {product_id}')}"
         )
 
         await CartEventHandlers._update_analytics("item_removed", payload)
@@ -82,7 +86,7 @@ class CartEventHandlers:
         await CartEventHandlers._send_notification(
             cart_id=cart_id,
             event_type="cart_cleared",
-            message=f"Корзина очищена ({items_count} товаров)"
+            message=f"Корзина очищена ({items_count} товаров удалено)"
         )
 
         await CartEventHandlers._update_analytics("cart_cleared", payload)
@@ -94,16 +98,17 @@ class CartEventHandlers:
         cart_id = payload.get('cart_id')
         order_id = payload.get('order_id')
         total_amount = payload.get('total_amount', 0)
+        total_items = payload.get('total_items', 0)
 
         logger.info(
             f"🛒 Checkout initiated for cart {cart_id}: "
-            f"Order {order_id}, Amount: ${total_amount}"
+            f"Order {order_id}, Amount: ${total_amount:.2f}, Items: {total_items}"
         )
 
         await CartEventHandlers._send_notification(
             cart_id=cart_id,
             event_type="checkout_initiated",
-            message=f"Заказ оформлен! Сумма: ${total_amount}"
+            message=f"Заказ {order_id} оформлен! Сумма: ${total_amount:.2f} ({total_items} товаров)"
         )
 
         await CartEventHandlers._update_analytics("checkout_initiated", payload)
@@ -125,13 +130,6 @@ class CartEventHandlers:
             # В реальном проекте здесь был бы HTTP-запрос к сервису уведомлений
             logger.info(f"📧 Notification sent: {notification_data}")
 
-            # Пример HTTP-запроса:
-            # async with httpx.AsyncClient() as client:
-            #     await client.post(
-            #         f"{settings.email_service_url}/notifications",
-            #         json=notification_data
-            #     )
-
         except Exception as e:
             logger.error(f"❌ Failed to send notification: {e}")
 
@@ -147,13 +145,6 @@ class CartEventHandlers:
 
             logger.info(f"📊 Analytics updated: {event_type}")
 
-            # В реальном проекте здесь был бы HTTP-запрос к сервису аналитики
-            # async with httpx.AsyncClient() as client:
-            #     await client.post(
-            #         f"{settings.analytics_service_url}/events",
-            #         json=analytics_data
-            #     )
-
         except Exception as e:
             logger.error(f"❌ Failed to update analytics: {e}")
 
@@ -161,11 +152,6 @@ class CartEventHandlers:
     async def _process_checkout(payload: Dict[str, Any]):
         """Дополнительная обработка checkout"""
         try:
-            # Здесь можно добавить логику:
-            # - Резервирование товаров
-            # - Создание записи в системе платежей
-            # - Отправка данных в систему доставки
-
             logger.info("💳 Processing checkout logic...")
 
             # Имитация обработки

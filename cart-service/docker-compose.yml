@@ -44,7 +44,7 @@ services:
       retries: 5
       start_period: 15s
 
-  # Kafka UI для мониторинга (опционально, но очень удобно!)
+  # Kafka UI для мониторинга
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
     container_name: kafka-ui
@@ -80,7 +80,7 @@ services:
       retries: 5
       start_period: 10s
 
-  # Mock Catalog Service (для тестирования)
+  # Mock Catalog Service
   mock-catalog:
     image: wiremock/wiremock:latest
     container_name: mock-catalog
@@ -117,7 +117,28 @@ services:
       DEBUG: "true"
       SECRET_KEY: "dev-secret-key-change-in-production"
     volumes:
-      - ./app:/app/app  # Для hot reload в development
+      - ./app:/app/app
+    networks:
+      - microservices
+    restart: unless-stopped
+
+  # 🎯 Notification Service (NEW!)
+  notification-service:
+    build: ../notification-service
+    container_name: notification-service
+    depends_on:
+      kafka:
+        condition: service_healthy
+    ports:
+      - "8002:8002"
+    environment:
+      DEBUG: "true"
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      KAFKA_GROUP_ID: notification-service
+      EMAIL_SERVICE_URL: http://localhost:8003
+      ANALYTICS_SERVICE_URL: http://localhost:8004
+    volumes:
+      - ../notification-service/app:/app/app  # Для hot reload
     networks:
       - microservices
     restart: unless-stopped
