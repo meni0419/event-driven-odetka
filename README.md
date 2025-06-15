@@ -73,12 +73,13 @@
 
 - `product_created`: {product_id, name, category_id, price, sku}
 - `product_updated`: {product_id, changes (object with updated fields)}
+- `inventory_low`: {product_id, current_quantity} 
 - `product_deactivated`: {product_id}
 - `inventory_updated`: {product_id, new_quantity} (Генерируется при резерве/освобождении склада)
 
 #### Подписывается/Обрабатывает:
 
-- `order_placed` (от order-service): Резервирует товары на складе, обновляет остатки, публикует inventory_updated.
+- `order_created` (от order-service): Резервирует товары на складе, обновляет остатки, публикует inventory_updated.
 - `order_cancelled` (от order-service): Возвращает товары на склад, обновляет остатки, публикует inventory_updated.
 - `review_rating_updated` (от review-service): Обновляет рейтинг товара на основе среднего.
 
@@ -122,6 +123,8 @@
 
 - `product_updated` (от catalog-service): Обновляет цену в активных корзинах, если товар еще там. Уведомляет
   пользователя через notification-service (если цена упала/выросла значительно).
+- `product_deactivated` // Для удаления товаров
+- `inventory_updated` // Проверка доступности
 
 ## 3. Модуль: Заказы (order-service)
 
