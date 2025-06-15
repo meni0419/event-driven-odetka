@@ -1,9 +1,11 @@
 fastapi
 uvicorn[standard]
-sqlalchemy
-psycopg2-binary
+aiokafka
 pydantic
 pydantic-settings
 httpx
+sqlalchemy
+asyncpg
+psycopg2-binary
+alembic
 python-multipart
-python-jose

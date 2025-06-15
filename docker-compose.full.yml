@@ -1,0 +1,115 @@
+version: '3.8'
+
+services:
+  # Инфраструктура
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.4.0
+    container_name: shared-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - ecommerce-network
+
+  kafka:
+    image: confluentinc/cp-kafka:7.4.0
+    container_name: shared-kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: true
+    networks:
+      - ecommerce-network
+
+  postgres:
+    image: postgres:15
+    container_name: shared-postgres
+    environment:
+      POSTGRES_DB: ecommerce_db
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin123
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - ecommerce-network
+
+  # Ваши сервисы
+  cart-service:
+    build: ./cart-service
+    container_name: cart-service
+    ports:
+      - "8001:8001"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://admin:admin123@postgres:5432/ecommerce_db
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - DEBUG=true
+    depends_on:
+      - postgres
+      - kafka
+    networks:
+      - ecommerce-network
+
+  order-service:
+    build: ./order-service
+    container_name: order-service
+    ports:
+      - "8002:8002"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://admin:admin123@postgres:5432/ecommerce_db
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - CATALOG_SERVICE_URL=http://catalog-service:8004
+      - CART_SERVICE_URL=http://cart-service:8001
+      - DEBUG=true
+    depends_on:
+      - postgres
+      - kafka
+    networks:
+      - ecommerce-network
+
+  # Сервисы друзей (примеры)
+  auth-service:
+    build: ./auth-service
+    container_name: auth-service
+    ports:
+      - "8003:8003"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://admin:admin123@postgres:5432/ecommerce_db
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - DEBUG=true
+    depends_on:
+      - postgres
+      - kafka
+    networks:
+      - ecommerce-network
+
+  catalog-service:
+    build: ./catalog-service
+    container_name: catalog-service
+    ports:
+      - "8004:8004"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://admin:admin123@postgres:5432/ecommerce_db
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - DEBUG=true
+    depends_on:
+      - postgres
+      - kafka
+    networks:
+      - ecommerce-network
+
+networks:
+  ecommerce-network:
+    driver: bridge
+    name: ecommerce-network
+
+volumes:
+  postgres_data:

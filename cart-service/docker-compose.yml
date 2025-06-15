@@ -1,151 +1,21 @@
 services:
-  # Zookeeper для Kafka
-  zookeeper:
-    image: confluentinc/cp-zookeeper:7.4.0
-    container_name: zookeeper
-    environment:
-      ZOOKEEPER_CLIENT_PORT: 2181
-      ZOOKEEPER_TICK_TIME: 2000
-    networks:
-      - microservices
-    healthcheck:
-      test: ["CMD", "nc", "-vz", "localhost", "2181"]
-      interval: 10s
-      timeout: 3s
-      retries: 3
-      start_period: 10s
-
-  # Kafka Broker
-  kafka:
-    image: confluentinc/cp-kafka:7.4.0
-    container_name: kafka
-    depends_on:
-      zookeeper:
-        condition: service_healthy
-    ports:
-      - "9092:9092"
-      - "9093:9093"
-    environment:
-      KAFKA_BROKER_ID: 1
-      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
-      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
-      KAFKA_NUM_PARTITIONS: 3
-    networks:
-      - microservices
-    healthcheck:
-      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
-      interval: 10s
-      timeout: 10s
-      retries: 5
-      start_period: 15s
-
-  # Kafka UI для мониторинга
-  kafka-ui:
-    image: provectuslabs/kafka-ui:latest
-    container_name: kafka-ui
-    depends_on:
-      kafka:
-        condition: service_healthy
-    ports:
-      - "8080:8080"
-    environment:
-      KAFKA_CLUSTERS_0_NAME: local
-      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
-    networks:
-      - microservices
-
-  # PostgreSQL для cart-service
-  cart-db:
-    image: postgres:15
-    container_name: cart-postgres
-    environment:
-      POSTGRES_DB: cart_db
-      POSTGRES_USER: cart_user
-      POSTGRES_PASSWORD: cart_password
-    ports:
-      - "5433:5432"
-    volumes:
-      - cart_postgres_data:/var/lib/postgresql/data
-    networks:
-      - microservices
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U cart_user -d cart_db"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-
-  # Mock Catalog Service
-  mock-catalog:
-    image: wiremock/wiremock:latest
-    container_name: mock-catalog
-    ports:
-      - "8001:8080"
-    volumes:
-      - ./wiremock:/home/wiremock
-    command: ["--global-response-templating", "--verbose"]
-    networks:
-      - microservices
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8080/__admin/health || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-      start_period: 15s
-
-  # Cart Service
   cart-service:
     build: .
     container_name: cart-service
-    depends_on:
-      cart-db:
-        condition: service_healthy
-      kafka:
-        condition: service_healthy
     ports:
-      - "8000:8000"
+      - "8001:8001"
     environment:
-      DATABASE_URL: postgresql://cart_user:cart_password@cart-db:5432/cart_db
-      CATALOG_SERVICE_URL: http://mock-catalog:8080
-      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
-      KAFKA_GROUP_ID: cart-service
-      DEBUG: "true"
-      SECRET_KEY: "dev-secret-key-change-in-production"
+      - DATABASE_URL=postgresql+psycopg2://admin:admin123@shared-postgres:5432/ecommerce_db
+      - KAFKA_BOOTSTRAP_SERVERS=shared-kafka:9092
+      - DEBUG=true
     volumes:
       - ./app:/app/app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
     networks:
-      - microservices
+      - ecommerce-network
     restart: unless-stopped
-
-  # 🎯 Notification Service (NEW!)
-  notification-service:
-    build: ../notification-service
-    container_name: notification-service
-    depends_on:
-      kafka:
-        condition: service_healthy
-    ports:
-      - "8002:8002"
-    environment:
-      DEBUG: "true"
-      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
-      KAFKA_GROUP_ID: notification-service
-      EMAIL_SERVICE_URL: http://localhost:8003
-      ANALYTICS_SERVICE_URL: http://localhost:8004
-    volumes:
-      - ../notification-service/app:/app/app  # Для hot reload
-    networks:
-      - microservices
-    restart: unless-stopped
-
-volumes:
-  cart_postgres_data:
 
 networks:
-  microservices:
-    driver: bridge
+  ecommerce-network:
+    external: true
+    name: ecommerce-network

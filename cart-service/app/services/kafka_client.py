@@ -3,7 +3,7 @@ import logging
 import uuid
 from datetime import datetime
 from typing import Dict, Any, Optional
-from aiokafka import AIOKafkaProducer, AIOKafkaConsumer
+from aiokafka import AIOKafkaProducer
 from aiokafka.errors import KafkaConnectionError, KafkaTimeoutError
 
 from ..config import settings
@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 class KafkaClient:
-    """Kafka клиент для отправки и получения событий"""
+    """Kafka клиент для отправки событий из cart-service"""
 
     def __init__(self):
         self.producer: Optional[AIOKafkaProducer] = None
@@ -26,7 +26,9 @@ class KafkaClient:
                 value_serializer=lambda v: json.dumps(v).encode('utf-8'),
                 key_serializer=lambda k: k.encode('utf-8') if k else None,
                 retry_backoff_ms=1000,
-                request_timeout_ms=30000
+                request_timeout_ms=30000,
+                acks='all',
+                enable_idempotence=True
             )
             await self.producer.start()
             logger.info("✅ Kafka producer started successfully")
@@ -50,24 +52,12 @@ class KafkaClient:
             payload: Dict[str, Any],
             key: Optional[str] = None
     ) -> bool:
-        """
-        Публикация события в Kafka
-
-        Args:
-            topic: Название топика
-            event_type: Тип события
-            payload: Данные события
-            key: Ключ для партиционирования (опционально)
-
-        Returns:
-            bool: True если успешно отправлено
-        """
+        """Публикация события в Kafka"""
         if not self.producer:
             logger.error("Kafka producer not started")
             return False
 
         try:
-            # Создаем стандартное событие
             event = {
                 "event_id": str(uuid.uuid4()),
                 "event_type": event_type,
@@ -76,7 +66,6 @@ class KafkaClient:
                 "payload": payload
             }
 
-            # Отправляем событие
             future = await self.producer.send(topic, value=event, key=key)
             record_metadata = await future
 
@@ -86,12 +75,6 @@ class KafkaClient:
             )
             return True
 
-        except KafkaTimeoutError:
-            logger.error(f"❌ Timeout publishing event {event_type} to {topic}")
-            return False
-        except KafkaConnectionError:
-            logger.error(f"❌ Connection error publishing event {event_type} to {topic}")
-            return False
         except Exception as e:
             logger.error(f"❌ Error publishing event {event_type} to {topic}: {e}")
             return False
